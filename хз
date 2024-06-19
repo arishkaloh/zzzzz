@@ -1,0 +1,88 @@
+ALTER TABLE перевалы
+ADD COLUMN status VARCHAR(10);
+
+### Задача 2: Создание класса для взаимодействия с базой данных
+
+import psycopg2
+import os
+
+class DatabaseHandler:
+    def __init__(self):
+        self.connection = psycopg2.connect(
+            host=os.getenv('FSTR_DB_HOST'),
+            port=os.getenv('FSTR_DB_PORT'),
+            user=os.getenv('FSTR_DB_LOGIN'),
+            password=os.getenv('FSTR_DB_PASS'),
+            dbname='your_db_name'
+        )
+        self.cursor = self.connection.cursor()
+
+    def add_new_pass(self, pass_data):
+        sql = "INSERT INTO перевалы (name, description, altitude, status) VALUES (%s, %s, %s, %s)"
+        pass_values = (pass_data['name'], pass_data['description'], pass_data['altitude'], 'new')
+        self.cursor.execute(sql, pass_values)
+        self.connection.commit()
+### Задача 3: Создание REST API метода `POST submitData`
+
+from flask import Flask, request, jsonify
+import os
+
+app = Flask(__name__)
+
+@app.route('/submitData', methods=['POST'])
+def submit_data():
+    try:
+        data = request.json
+        db_handler = DatabaseHandler()
+        db_handler.add_new_pass(data)
+        return jsonify({"message": "Pass added successfully"}), 200
+    except Exception as e:
+        return jsonify({"": str(e)}), 500
+
+if __name__ == '__main__':
+    app.run()
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+# Пример базы данных объектов
+objects_db = [
+    {"id": 1, "name": "Object 1", "status": "new", "moderation_status": "pending", "user_email": "user1@example.com"},
+    {"id": 2, "name": "Object 2", "status": "new", "moderation_status": "approved", "user_email": "user2@example.com"}
+]
+
+# GET /submitData/<id> - получить одну запись (перевал) по её id
+@app.route('/submitData/<int:object_id>', methods=['GET'])
+def get_object_by_id(object_id):
+    for obj in objects_db:
+        if obj['id'] == object_id:
+            return jsonify(obj)
+    return jsonify({"message": "Object not found"}), 404
+
+# PATCH /submitData/<id> - отредактировать существующую запись
+@app.route('/submitData/<int:object_id>', methods=['PATCH'])
+def edit_object(object_id):
+    req_data = request.get_json()
+    for obj in objects_db:
+        if obj['id'] == object_id:
+            if obj['status'] == 'new':
+                for key, value in req_data.items():
+                    if key not in ['full_name', 'email', 'phone']:
+                        obj[key] = value
+                return jsonify({"state": 1})
+            else:
+                return jsonify({"state": 0, "message": "Object is not in 'new' status, cannot be edited"}), 400
+    return jsonify({"state": 0, "message": "Object not found"}), 404
+
+# GET /submitData/?user__email=<email> - список данных обо всех объектах пользователя
+@app.route('/submitData/', methods=['GET'])
+def get_objects_by_user_email():
+    user_email = request.args.get('user__email')
+    user_objects = [obj for obj in objects_db if obj['user_email'] == user_email]
+    return jsonify(user_objects)
+
+if __name__ == '__main__':
+    app.run(debug=True)
+
+
+
